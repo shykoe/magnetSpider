@@ -13,12 +13,13 @@ import (
 	"strings"
 	"time"
 	"database/sql"
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	"github.com/marksamman/bencode"
 	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/pkg/fileutil"
 	"gopkg.in/yaml.v2"
+	"errors"
 )
 
 const (
@@ -65,15 +66,17 @@ func (t *torrent) InsertDB() error{
 		"insert INTO infohash_table(`hashinfo`,`name`,`discover_time`, `discover_from`) values(?,?,?,?)",
 		 t.infohashHex, t.name, time.Now(), LOCALHOST)
 	if err != nil{
-		log.Fatal(err)
+		merr := err.(*mysql.MySQLError)
+		if merr.Number == 1062{
+			return errors.New("Dup key!")
+		}
 		return err
 	}
 	for _, file := range t.files{
 		_, err = DB.Exec("INSERT INTO files_table(`hashinfo`,`file_name`,`size`) values(?,?,?)",
 		 t.infohashHex, file.name , file.length)
 		 if err != nil{
-			log.Fatal(err)
-			 continue
+			continue
 		 }
 	}
 	return nil
