@@ -60,17 +60,19 @@ func (t *torrent) String() string {
 	)
 }
 func (t *torrent) InsertDB() error{
+	log.Print("Insert ", t.infohashHex, "name ", t.name)
 	_, err := DB.Exec(
 		"insert INTO infohash_table(`hashinfo`,`name`,`discover_time`, `discover_from`) values(?,?,?,?)",
 		 t.infohashHex, t.name, time.Now(), LOCALHOST)
 	if err != nil{
+		log.Fatal(err)
 		return err
 	}
-	log.Print("Insert ", t.infohashHex, "name ", t.name)
 	for _, file := range t.files{
 		_, err = DB.Exec("INSERT INTO files_table(`hashinfo`,`file_name`,`size`) values(?,?,?)",
 		 t.infohashHex, file.name , file.length)
 		 if err != nil{
+			log.Fatal(err)
 			 continue
 		 }
 	}
@@ -195,6 +197,7 @@ func (t *torsniff) work(ac *announcement, tokens chan struct{}) {
 	meta, err := wire.fetch()
 	if err != nil {
 		t.blacklist.add(peerAddr)
+		log.Print("wire.fetch() Error")
 		return
 	}
 
@@ -204,6 +207,7 @@ func (t *torsniff) work(ac *announcement, tokens chan struct{}) {
 
 	torrent, err := parseTorrent(meta, ac.infohashHex)
 	if err != nil {
+		log.Print("parseTorrent Error")
 		return
 	}
 	err = torrent.InsertDB()
