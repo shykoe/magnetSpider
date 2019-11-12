@@ -17,3 +17,4 @@ torsniff
 releases
 .DS_Store
 bin
+config.yml

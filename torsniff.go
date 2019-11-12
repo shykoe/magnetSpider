@@ -12,17 +12,28 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
+	"database/sql"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/marksamman/bencode"
 	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/pkg/fileutil"
+	"gopkg.in/yaml.v2"
 )
 
 const (
 	directory = "torrents"
 )
-
+var DB *sql.DB
+var (
+    USERNAME string
+    PASSWORD string
+    NETWORK  = "tcp"
+    SERVER   string
+    PORT     = 17658
+	DATABASE = "megnet"
+	LOCALHOST string
+)
 type tfile struct {
 	name   string
 	length int64
@@ -48,7 +59,24 @@ func (t *torrent) String() string {
 		len(t.files),
 	)
 }
+func (t *torrent) InsertDB() error{
+	_, err := DB.Exec(
+		"insert INTO infohash_table(`hashinfo`,`name`,`discover_time`, `discover_from`) values(?,?,?,?)",
+		 t.infohashHex, t.name, time.Now(), LOCALHOST)
+	if err != nil{
+		return err
+	}
+	log.Print("Insert ", t.infohashHex, "name ", t.name)
+	for _, file := range t.files{
+		_, err = DB.Exec("INSERT INTO files_table(`hashinfo`,`file_name`,`size`) values(?,?,?)",
+		 t.infohashHex, file.name , file.length)
+		 if err != nil{
+			 continue
+		 }
+	}
+	return nil
 
+}
 func parseTorrent(meta []byte, infohashHex string) (*torrent, error) {
 	dict, err := bencode.Decode(bytes.NewBuffer(meta))
 	if err != nil {
@@ -170,25 +198,33 @@ func (t *torsniff) work(ac *announcement, tokens chan struct{}) {
 		return
 	}
 
-	if err := t.saveTorrent(ac.infohashHex, meta); err != nil {
-		return
-	}
+	// if err := t.saveTorrent(ac.infohashHex, meta); err != nil {
+	// 	return
+	// }
 
 	torrent, err := parseTorrent(meta, ac.infohashHex)
 	if err != nil {
 		return
 	}
-
-	log.Println(torrent)
-}
-
-func (t *torsniff) isTorrentExist(infohashHex string) bool {
-	name, _ := t.torrentPath(infohashHex)
-	_, err := os.Stat(name)
-	if os.IsNotExist(err) {
-		return false
+	err = torrent.InsertDB()
+	if err != nil{
+		log.Print(err)
 	}
-	return err == nil
+	//log.Println(torrent)
+}
+func (t *torsniff) isTorrentExist(infohashHex string) bool {
+    var sum int64
+    query := "select count(*) from infohash_table where hashinfo=?"
+    if  err := DB.QueryRow(query,infohashHex).Scan(&sum); err != nil{
+		log.Fatal(err)
+        return true
+    }
+    if sum == 0{
+		log.Print("find New !\n")
+        return false
+    }
+    return true
+
 }
 
 func (t *torsniff) saveTorrent(infohashHex string, data []byte) error {
@@ -226,6 +262,33 @@ func (t *torsniff) torrentPath(infohashHex string) (name string, dir string) {
 
 func main() {
 	log.SetFlags(0)
+	var err  error
+	config := make(map[string] string)
+	data, err := ioutil.ReadFile("./config.yml")
+	err = yaml.Unmarshal(data,&config)
+	if err != nil{
+		log.Fatal(err)
+	}
+	USERNAME = config["username"]
+	PASSWORD = config["password"]
+	SERVER = config["server"]
+	LOCALHOST = config["localname"]
+	log.Print("USERNAME",USERNAME)
+	log.Print("PASSWORD",PASSWORD)
+	log.Print("SERVER",SERVER)
+	log.Print("LOCALHOST",LOCALHOST)
+
+	dsn := fmt.Sprintf("%s:%s@%s(%s:%d)/%s",USERNAME,PASSWORD,NETWORK,SERVER,PORT,DATABASE)
+	
+	DB, err = sql.Open("mysql",dsn)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+	log.Print("DB connect ok!")
+	DB.SetConnMaxLifetime(100*time.Second)  //最大连接周期，超过时间的连接就close
+    DB.SetMaxOpenConns(1000)//设置最大连接数
+	DB.SetMaxIdleConns(16) //设置闲置连接数
 
 	var addr string
 	var port uint16
