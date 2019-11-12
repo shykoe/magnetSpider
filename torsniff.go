@@ -197,7 +197,7 @@ func (t *torsniff) work(ac *announcement, tokens chan struct{}) {
 	meta, err := wire.fetch()
 	if err != nil {
 		t.blacklist.add(peerAddr)
-		log.Print("wire.fetch() Error")
+		log.Print("wire.fetch() Error ",err)
 		return
 	}
 
