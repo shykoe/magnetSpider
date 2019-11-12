@@ -1,10 +1,17 @@
-package main
+package magnet
 
 import (
 	"bytes"
 	"fmt"
+	"github.com/marksamman/bencode"
+	"github.com/mitchellh/go-homedir"
+	"github.com/shykoe/magnetSpider/dao"
+	"github.com/shykoe/magnetSpider/model"
+	log "github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
+	"go.etcd.io/etcd/pkg/fileutil"
+	"gopkg.in/yaml.v2"
 	"io/ioutil"
-	"log"
 	"net"
 	"os"
 	"path"
@@ -12,27 +19,20 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"database/sql"
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/marksamman/bencode"
-	"github.com/mitchellh/go-homedir"
-	"github.com/spf13/cobra"
-	"go.etcd.io/etcd/pkg/fileutil"
-	"gopkg.in/yaml.v2"
 )
 
 const (
 	directory = "torrents"
 )
-var DB *sql.DB
 var (
     USERNAME string
     PASSWORD string
     NETWORK  = "tcp"
     SERVER   string
-    PORT     = 17658
+    PORT     int
 	DATABASE = "megnet"
 	LOCALHOST string
+	Count int64
 )
 type tfile struct {
 	name   string
@@ -43,14 +43,14 @@ func (t *tfile) String() string {
 	return fmt.Sprintf("name: %s\n, size: %d\n", t.name, t.length)
 }
 
-type torrent struct {
+type Torrent struct {
 	infohashHex string
 	name        string
 	length      int64
 	files       []*tfile
 }
 
-func (t *torrent) String() string {
+func (t *Torrent) String() string {
 	return fmt.Sprintf(
 		"link: %s\nname: %s\nsize: %d\nfile: %d\n",
 		fmt.Sprintf("magnet:?xt=urn:btih:%s", t.infohashHex),
@@ -59,40 +59,26 @@ func (t *torrent) String() string {
 		len(t.files),
 	)
 }
-func (t *torrent) InsertDB() error{
-	log.Print("Insert ", t.infohashHex, "name ", t.name)
-	_, err := DB.Exec(
-		"insert INTO infohash_table(`hashinfo`,`name`,`discover_time`, `discover_from`) values(?,?,?,?)",
-		 t.infohashHex, t.name, time.Now(), LOCALHOST)
-	if err != nil{
-		log.Fatal(err)
-		return err
-	}
-	for _, file := range t.files{
-		_, err = DB.Exec("INSERT INTO files_table(`hashinfo`,`file_name`,`size`) values(?,?,?)",
-		 t.infohashHex, file.name , file.length)
-		 if err != nil{
-			log.Fatal(err)
-			 continue
-		 }
-	}
+func (t *Torrent) InsertDB() error {
 	return nil
-
 }
-func parseTorrent(meta []byte, infohashHex string) (*torrent, error) {
+func parseTorrent(meta []byte, infohashHex string) (*model.Torrent, error) {
 	dict, err := bencode.Decode(bytes.NewBuffer(meta))
 	if err != nil {
 		return nil, err
 	}
 
-	t := &torrent{infohashHex: infohashHex}
+	t := &model.Torrent{
+		InfoHash: infohashHex,
+		DiscoverTime: time.Now(),
+	}
 	if name, ok := dict["name.utf-8"].(string); ok {
-		t.name = name
+		t.Name = name
 	} else if name, ok := dict["name"].(string); ok {
-		t.name = name
+		t.Name = name
 	}
 	if length, ok := dict["length"].(int64); ok {
-		t.length = length
+		t.Length = length
 	}
 
 	var totalSize int64
@@ -116,7 +102,7 @@ func parseTorrent(meta []byte, infohashHex string) (*torrent, error) {
 			filelength = length
 			totalSize += filelength
 		}
-		t.files = append(t.files, &tfile{name: filename, length: filelength})
+		t.Files = append(t.Files, &model.TorrentFile{Name: filename, Size: filelength})
 	}
 
 	if files, ok := dict["files"].([]interface{}); ok {
@@ -127,30 +113,32 @@ func parseTorrent(meta []byte, infohashHex string) (*torrent, error) {
 		}
 	}
 
-	if t.length == 0 {
-		t.length = totalSize
+	if t.Length == 0 {
+		t.Length = totalSize
 	}
-	if len(t.files) == 0 {
-		t.files = append(t.files, &tfile{name: t.name, length: t.length})
+	if len(t.Files) == 0 {
+		t.Files = append(t.Files, &model.TorrentFile{Name: t.Name, Size: t.Length})
 	}
 
 	return t, nil
 }
 
-type torsniff struct {
-	laddr      string
-	maxFriends int
-	maxPeers   int
-	secret     string
-	timeout    time.Duration
-	blacklist  *blackList
-	dir        string
+type SpiderCore struct {
+	Laddr      string
+	MaxFriends int
+	MaxPeers   int
+	Secret     string
+	Timeout    time.Duration
+	Blacklist  *blackList
+	Dir        string
+	Dao        dao.TorrentDao
+	Source     string
 }
 
-func (t *torsniff) run() error {
-	tokens := make(chan struct{}, t.maxPeers)
+func (t *SpiderCore) Run() error {
+	tokens := make(chan struct{}, t.MaxPeers)
 
-	dht, err := newDHT(t.laddr, t.maxFriends)
+	dht, err := newDHT(t.Laddr, t.MaxFriends)
 	if err != nil {
 		return err
 	}
@@ -177,61 +165,57 @@ func (t *torsniff) run() error {
 
 }
 
-func (t *torsniff) work(ac *announcement, tokens chan struct{}) {
+func (t *SpiderCore) work(ac *announcement, tokens chan struct{}) {
 	defer func() {
 		<-tokens
 	}()
-
-	if t.isTorrentExist(ac.infohashHex) {
-		return
-	}
+	log.Infof("income %s", ac.infohashHex)
+	//exists := t.isTorrentExist(ac.infohashHex)
+	//if exists {
+	//	log.Infof("infohash %s exists pass", ac.infohashHex)
+	//	return
+	//}
 
 	peerAddr := ac.peer.String()
-	if t.blacklist.has(peerAddr) {
+	if t.Blacklist.has(peerAddr) {
 		return
 	}
 
-	wire := newMetaWire(string(ac.infohash), peerAddr, t.timeout)
+	wire := newMetaWire(string(ac.infohash), peerAddr, t.Timeout)
 	defer wire.free()
 
 	meta, err := wire.fetch()
 	if err != nil {
-		t.blacklist.add(peerAddr)
-		log.Print("wire.fetch() Error")
+		t.Blacklist.add(peerAddr)
+		log.Print("wire.fetch() Error ",err)
 		return
 	}
 
-	// if err := t.saveTorrent(ac.infohashHex, meta); err != nil {
-	// 	return
-	// }
+
 
 	torrent, err := parseTorrent(meta, ac.infohashHex)
 	if err != nil {
 		log.Print("parseTorrent Error")
 		return
 	}
-	err = torrent.InsertDB()
+	if torrent != nil {
+		torrent.DiscoverFrom = t.Source
+		err := t.Dao.InsertTorrent2Es(torrent)
+		if err != nil {
+			log.Errorf("InsertTorrent err: %s", err.Error())
+		}
+	}
 	if err != nil{
 		log.Print(err)
 	}
-	//log.Println(torrent)
+	Count ++
 }
-func (t *torsniff) isTorrentExist(infohashHex string) bool {
-    var sum int64
-    query := "select count(*) from infohash_table where hashinfo=?"
-    if  err := DB.QueryRow(query,infohashHex).Scan(&sum); err != nil{
-		log.Fatal(err)
-        return true
-    }
-    if sum == 0{
-		log.Print("find New !\n")
-        return false
-    }
-    return true
+func (t *SpiderCore) isTorrentExist(infoHash string) bool {
 
+	return t.Dao.TorrentNotExists(infoHash)
 }
 
-func (t *torsniff) saveTorrent(infohashHex string, data []byte) error {
+func (t *SpiderCore) saveTorrent(infohashHex string, data []byte) error {
 	name, dir := t.torrentPath(infohashHex)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
@@ -258,14 +242,14 @@ func (t *torsniff) saveTorrent(infohashHex string, data []byte) error {
 	return nil
 }
 
-func (t *torsniff) torrentPath(infohashHex string) (name string, dir string) {
-	dir = path.Join(t.dir, infohashHex[:2], infohashHex[len(infohashHex)-2:])
-	name = path.Join(dir, infohashHex+".torrent")
+func (t *SpiderCore) torrentPath(infohashHex string) (name string, dir string) {
+	dir = path.Join(t.Dir, infohashHex[:2], infohashHex[len(infohashHex)-2:])
+	name = path.Join(dir, infohashHex+".Torrent")
 	return
 }
 
 func main() {
-	log.SetFlags(0)
+
 	var err  error
 	config := make(map[string] string)
 	data, err := ioutil.ReadFile("./config.yml")
@@ -277,22 +261,16 @@ func main() {
 	PASSWORD = config["password"]
 	SERVER = config["server"]
 	LOCALHOST = config["localname"]
+	PORT,_ = strconv.Atoi(config["port"])
 	log.Print("USERNAME",USERNAME)
 	log.Print("PASSWORD",PASSWORD)
 	log.Print("SERVER",SERVER)
 	log.Print("LOCALHOST",LOCALHOST)
 
 	dsn := fmt.Sprintf("%s:%s@%s(%s:%d)/%s",USERNAME,PASSWORD,NETWORK,SERVER,PORT,DATABASE)
-	
-	DB, err = sql.Open("mysql",dsn)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-	log.Print("DB connect ok!")
-	DB.SetConnMaxLifetime(100*time.Second)  //最大连接周期，超过时间的连接就close
-    DB.SetMaxOpenConns(1000)//设置最大连接数
-	DB.SetMaxIdleConns(16) //设置闲置连接数
+	log.Printf("dsb %s", dsn)
+
+
 
 	var addr string
 	var port uint16
@@ -306,8 +284,8 @@ func main() {
 	userHome := path.Join(home, directory)
 
 	root := &cobra.Command{
-		Use:          "torsniff",
-		Short:        "torsniff - A sniffer that sniffs torrents from BitTorrent network.",
+		Use:          "SpiderCore",
+		Short:        "SpiderCore - A sniffer that sniffs torrents from BitTorrent network.",
 		SilenceUsage: true,
 	}
 	root.RunE = func(cmd *cobra.Command, args []string) error {
@@ -325,25 +303,25 @@ func main() {
 			log.SetOutput(os.Stdout)
 		}
 
-		p := &torsniff{
-			laddr:      net.JoinHostPort(addr, strconv.Itoa(int(port))),
-			timeout:    timeout,
-			maxFriends: friends,
-			maxPeers:   peers,
-			secret:     string(randBytes(20)),
-			dir:        absDir,
-			blacklist:  newBlackList(5*time.Minute, 50000),
+		p := &SpiderCore{
+			Laddr:      net.JoinHostPort(addr, strconv.Itoa(int(port))),
+			Timeout:    timeout,
+			MaxFriends: friends,
+			MaxPeers:   peers,
+			Secret:     string(RandBytes(20)),
+			Dir:        absDir,
+			Blacklist:  NewBlackList(5*time.Minute, 50000),
 		}
-		return p.run()
+		return p.Run()
 	}
 
 	root.Flags().StringVarP(&addr, "addr", "a", "", "listen on given address (default all, ipv4 and ipv6)")
 	root.Flags().Uint16VarP(&port, "port", "p", 6881, "listen on given port")
 	root.Flags().IntVarP(&friends, "friends", "f", 500, "max fiends to make with per second")
 	root.Flags().IntVarP(&peers, "peers", "e", 400, "max peers to connect to download torrents")
-	root.Flags().DurationVarP(&timeout, "timeout", "t", 10*time.Second, "max time allowed for downloading torrents")
-	root.Flags().StringVarP(&dir, "dir", "d", userHome, "the directory to store the torrents")
-	root.Flags().BoolVarP(&verbose, "verbose", "v", true, "run in verbose mode")
+	root.Flags().DurationVarP(&timeout, "Timeout", "t", 10*time.Second, "max time allowed for downloading torrents")
+	root.Flags().StringVarP(&dir, "Dir", "d", userHome, "the directory to store the torrents")
+	root.Flags().BoolVarP(&verbose, "verbose", "v", false, "Run in verbose mode")
 
 	if err := root.Execute(); err != nil {
 		fmt.Println(fmt.Errorf("could not start: %s", err))

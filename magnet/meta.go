@@ -1,4 +1,4 @@
-package main
+package magnet
 
 import (
 	"bytes"
@@ -51,7 +51,7 @@ func newMetaWire(infohash string, from string, timeout time.Duration) *metaWire 
 	w := metaWirePool.Get().(*metaWire)
 	w.infohash = infohash
 	w.from = from
-	w.peerID = string(randBytes(20))
+	w.peerID = string(RandBytes(20))
 	w.timeout = timeout
 	w.conn = nil
 	w.err = nil
@@ -82,7 +82,9 @@ func (mw *metaWire) fetchCtx(ctx context.Context) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-
+		if len(data) == 0 {
+			return nil, errors.New("metadata null")
+		}
 		if data[0] != extended {
 			continue
 		}
