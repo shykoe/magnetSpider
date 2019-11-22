@@ -34,6 +34,7 @@ var (
     PORT     = 17658
 	DATABASE = "megnet"
 	LOCALHOST string
+	Count int64
 )
 type tfile struct {
 	name   string
@@ -217,6 +218,7 @@ func (t *torsniff) work(ac *announcement, tokens chan struct{}) {
 	if err != nil{
 		log.Print(err)
 	}
+	Count ++
 	//log.Println(torrent)
 }
 func (t *torsniff) isTorrentExist(infohashHex string) bool {
@@ -286,7 +288,6 @@ func main() {
 	log.Print("LOCALHOST",LOCALHOST)
 
 	dsn := fmt.Sprintf("%s:%s@%s(%s:%d)/%s",USERNAME,PASSWORD,NETWORK,SERVER,PORT,DATABASE)
-	
 	DB, err = sql.Open("mysql",dsn)
 	if err != nil {
 		log.Fatal(err)
@@ -294,8 +295,8 @@ func main() {
 	}
 	log.Print("DB connect ok!")
 	DB.SetConnMaxLifetime(100*time.Second)  //最大连接周期，超过时间的连接就close
-    DB.SetMaxOpenConns(1000)//设置最大连接数
-	DB.SetMaxIdleConns(16) //设置闲置连接数
+  	DB.SetMaxOpenConns(1000)//设置最大连接数
+	DB.SetMaxIdleConns(0) //设置闲置连接数
 
 	var addr string
 	var port uint16
@@ -346,7 +347,7 @@ func main() {
 	root.Flags().IntVarP(&peers, "peers", "e", 400, "max peers to connect to download torrents")
 	root.Flags().DurationVarP(&timeout, "timeout", "t", 10*time.Second, "max time allowed for downloading torrents")
 	root.Flags().StringVarP(&dir, "dir", "d", userHome, "the directory to store the torrents")
-	root.Flags().BoolVarP(&verbose, "verbose", "v", true, "run in verbose mode")
+	root.Flags().BoolVarP(&verbose, "verbose", "v", false, "run in verbose mode")
 
 	if err := root.Execute(); err != nil {
 		fmt.Println(fmt.Errorf("could not start: %s", err))
