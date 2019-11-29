@@ -82,7 +82,9 @@ func (mw *metaWire) fetchCtx(ctx context.Context) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-
+		if len(data) == 0 {
+			return nil, errors.New("metadata null")
+		}
 		if data[0] != extended {
 			continue
 		}
