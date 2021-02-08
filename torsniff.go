@@ -61,24 +61,25 @@ func (t *torrent) String() string {
 		len(t.files),
 	)
 }
-func (t *torrent) InsertDB() error{
+func (t *torrent) InsertDB() error {
 	log.Print("Insert ", t.infohashHex, "name ", t.name)
-	_, err := DB.Exec(
-		"insert INTO infohash_table(`hashinfo`,`name`,`discover_time`, `discover_from`) values(?,?,?,?)",
-		 t.infohashHex, t.name, time.Now(), LOCALHOST)
-	if err != nil{
+	row, err := DB.Exec(
+		"insert INTO t_torrent_info(`hash`,`name`,`discover_time`, `discover_from`) values(?,?,?,?)",
+		t.infohashHex, t.name, time.Now(), LOCALHOST)
+	if err != nil {
 		merr := err.(*mysql.MySQLError)
-		if merr.Number == 1062{
+		if merr.Number == 1062 {
 			return errors.New("Dup key!")
 		}
 		return err
 	}
-	for _, file := range t.files{
-		_, err = DB.Exec("INSERT INTO files_table(`hashinfo`,`file_name`,`size`) values(?,?,?)",
-		 t.infohashHex, file.name , file.length)
-		 if err != nil{
+	hashID, _ := row.LastInsertId()
+	for _, file := range t.files {
+		_, err = DB.Exec("INSERT INTO files_table(`info_id`,`hash`,`file_name`,`size`) values(?,?,?,?)",
+			hashID, t.infohashHex, file.name, file.length)
+		if err != nil {
 			continue
-		 }
+		}
 	}
 	return nil
 
