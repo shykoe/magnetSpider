@@ -2,7 +2,15 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
+	"errors"
 	"fmt"
+	"github.com/go-sql-driver/mysql"
+	"github.com/marksamman/bencode"
+	"github.com/mitchellh/go-homedir"
+	"github.com/spf13/cobra"
+	"go.etcd.io/etcd/pkg/fileutil"
+	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"net"
@@ -12,14 +20,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"database/sql"
-	"github.com/go-sql-driver/mysql"
-	"github.com/marksamman/bencode"
-	"github.com/mitchellh/go-homedir"
-	"github.com/spf13/cobra"
-	"go.etcd.io/etcd/pkg/fileutil"
-	"gopkg.in/yaml.v2"
-	"errors"
 )
 
 const (
@@ -31,7 +31,7 @@ var (
     PASSWORD string
     NETWORK  = "tcp"
     SERVER   string
-    PORT     = 17658
+    PORT     int
 	DATABASE = "megnet"
 	LOCALHOST string
 	Count int64
@@ -282,12 +282,14 @@ func main() {
 	PASSWORD = config["password"]
 	SERVER = config["server"]
 	LOCALHOST = config["localname"]
+	PORT,_ = strconv.Atoi(config["port"])
 	log.Print("USERNAME",USERNAME)
 	log.Print("PASSWORD",PASSWORD)
 	log.Print("SERVER",SERVER)
 	log.Print("LOCALHOST",LOCALHOST)
 
 	dsn := fmt.Sprintf("%s:%s@%s(%s:%d)/%s",USERNAME,PASSWORD,NETWORK,SERVER,PORT,DATABASE)
+	log.Printf("dsb %s", dsn)
 	DB, err = sql.Open("mysql",dsn)
 	if err != nil {
 		log.Fatal(err)
