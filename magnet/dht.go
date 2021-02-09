@@ -1,4 +1,4 @@
-package main
+package magnet
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
-	_ "log"
+	_ "github.com/sirupsen/logrus"
 	"github.com/marksamman/bencode"
 	"golang.org/x/time/rate"
 )

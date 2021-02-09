@@ -1,18 +1,15 @@
-package main
+package magnet
 
 import (
 	"bytes"
-	"database/sql"
-	"errors"
 	"fmt"
-	"github.com/go-sql-driver/mysql"
 	"github.com/marksamman/bencode"
 	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/pkg/fileutil"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"net"
 	"os"
 	"path"
@@ -25,7 +22,6 @@ import (
 const (
 	directory = "torrents"
 )
-var DB *sql.DB
 var (
     USERNAME string
     PASSWORD string
@@ -62,27 +58,27 @@ func (t *torrent) String() string {
 	)
 }
 func (t *torrent) InsertDB() error {
-	log.Print("Insert ", t.infohashHex, "name ", t.name)
-	row, err := DB.Exec(
-		"insert INTO t_torrent_info(`hash`,`name`,`discover_time`, `discover_from`) values(?,?,?,?)",
-		t.infohashHex, t.name, time.Now(), LOCALHOST)
-	if err != nil {
-		merr := err.(*mysql.MySQLError)
-		if merr.Number == 1062 {
-			return errors.New("Dup key!")
-		}
-		return err
-	}
-	hashID, _ := row.LastInsertId()
-	for _, file := range t.files {
-		_, err = DB.Exec("INSERT INTO files_table(`info_id`,`hash`,`file_name`,`size`) values(?,?,?,?)",
-			hashID, t.infohashHex, file.name, file.length)
-		if err != nil {
-			continue
-		}
-	}
+	//log.Print("Insert ", t.infohashHex, "name ", t.name)
+	//row, err := DB.Exec(
+	//	"insert INTO t_torrent_info(`hash`,`name`,`discover_time`, `discover_from`) values(?,?,?,?)",
+	//	t.infohashHex, t.name, time.Now(), LOCALHOST)
+	//if err != nil {
+	//	merr := err.(*mysql.MySQLError)
+	//	if merr.Number == 1062 {
+	//		return errors.New("Dup key!")
+	//	}
+	//	return err
+	//}
+	//hashID, _ := row.LastInsertId()
+	//for _, file := range t.files {
+	//	_, err = DB.Exec("INSERT INTO files_table(`info_id`,`hash`,`file_name`,`size`) values(?,?,?,?)",
+	//		hashID, t.infohashHex, file.name, file.length)
+	//	if err != nil {
+	//		continue
+	//	}
+	//}
+	//return nil
 	return nil
-
 }
 func parseTorrent(meta []byte, infohashHex string) (*torrent, error) {
 	dict, err := bencode.Decode(bytes.NewBuffer(meta))
@@ -223,18 +219,18 @@ func (t *torsniff) work(ac *announcement, tokens chan struct{}) {
 	//log.Println(torrent)
 }
 func (t *torsniff) isTorrentExist(infohashHex string) bool {
-    var sum int64
-    query := "select count(*) from infohash_table where hashinfo=?"
-    if  err := DB.QueryRow(query,infohashHex).Scan(&sum); err != nil{
-		log.Fatal(err)
-        return true
-    }
-    if sum == 0{
-		log.Print("find New !\n")
-        return false
-    }
-    return true
-
+    //var sum int64
+    //query := "select count(*) from infohash_table where hashinfo=?"
+    //if  err := DB.QueryRow(query,infohashHex).Scan(&sum); err != nil{
+	//	log.Fatal(err)
+    //    return true
+    //}
+    //if sum == 0{
+	//	log.Print("find New !\n")
+    //    return false
+    //}
+    //return true
+	return true
 }
 
 func (t *torsniff) saveTorrent(infohashHex string, data []byte) error {
@@ -271,7 +267,7 @@ func (t *torsniff) torrentPath(infohashHex string) (name string, dir string) {
 }
 
 func main() {
-	log.SetFlags(0)
+
 	var err  error
 	config := make(map[string] string)
 	data, err := ioutil.ReadFile("./config.yml")
@@ -291,15 +287,8 @@ func main() {
 
 	dsn := fmt.Sprintf("%s:%s@%s(%s:%d)/%s",USERNAME,PASSWORD,NETWORK,SERVER,PORT,DATABASE)
 	log.Printf("dsb %s", dsn)
-	DB, err = sql.Open("mysql",dsn)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-	log.Print("DB connect ok!")
-	DB.SetConnMaxLifetime(100*time.Second)  //最大连接周期，超过时间的连接就close
-  	DB.SetMaxOpenConns(1000)//设置最大连接数
-	DB.SetMaxIdleConns(0) //设置闲置连接数
+
+
 
 	var addr string
 	var port uint16
