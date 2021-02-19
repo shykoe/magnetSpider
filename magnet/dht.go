@@ -110,7 +110,7 @@ type announcement struct {
 	infohashHex string
 }
 
-func randBytes(n int) []byte {
+func RandBytes(n int) []byte {
 	b := make([]byte, n)
 	rand.Read(b)
 	return b
@@ -188,11 +188,11 @@ func newDHT(laddr string, maxFriendsPerSec int) (*dht, error) {
 			limit: maxFriendsPerSec * 10,
 			input: make(chan struct{}, 1),
 		},
-		localID: randBytes(20),
+		localID: RandBytes(20),
 		conn:    conn.(*net.UDPConn),
 		chNode:  make(chan *node),
 		die:     make(chan struct{}),
-		secret:  randBytes(20),
+		secret:  RandBytes(20),
 	}
 	d.friendsLimiter = rate.NewLimiter(per(maxFriendsPerSec, time.Second), maxFriendsPerSec)
 	d.queryTypes = map[string]func(map[string]interface{}, net.UDPAddr){
@@ -231,7 +231,7 @@ func (d *dht) join() {
 			select {
 			case d.chNode <- &node{
 				addr: addr,
-				id:   string(randBytes(20)),
+				id:   string(RandBytes(20)),
 			}:
 			case <-d.die:
 				return
@@ -296,9 +296,9 @@ func (d *dht) onReply(dict map[string]interface{}, from net.UDPAddr) {
 }
 
 func (d *dht) findNode(to string, target nodeID) {
-	q := makeQuery(string(randBytes(2)), "find_node", map[string]interface{}{
+	q := makeQuery(string(RandBytes(2)), "find_node", map[string]interface{}{
 		"id":     string(neighborID(target, d.localID)),
-		"target": string(randBytes(20)),
+		"target": string(RandBytes(20)),
 	})
 
 	addr, err := net.ResolveUDPAddr("udp", to)

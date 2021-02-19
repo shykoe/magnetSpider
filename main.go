@@ -1,43 +1,50 @@
 package main
 
 import (
+	"context"
+	"fmt"
+	"github.com/shykoe/magnetSpider/dao"
+	"github.com/shykoe/magnetSpider/magnet"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
-	log "github.com/sirupsen/logrus"
 	"net"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 )
 
 func main() {
-	var err  error
+	var err error
 	var addr string
 	var port uint16
 	var peers int
 	var timeout time.Duration
-	var dir string
 	var verbose bool
 	var friends int
-	config := make(map[string] string)
+	var dsn string
+	config := make(map[string]string)
 	data, err := ioutil.ReadFile("./config.yml")
-	err = yaml.Unmarshal(data,&config)
-	if err != nil{
+	err = yaml.Unmarshal(data, &config)
+	if err != nil {
 		log.Fatal(err)
 	}
+	dsn = fmt.Sprintf("mongodb://%s:%s@%s", config["user_name"], config["pass_word"], config["db_addr"])
+	fmt.Println(dsn)
+	cli, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(dsn))
+	var dao dao.TorrentDaoImpl
+	dao.DB = cli
+	dao.DataBase = "magnet"
 	root := &cobra.Command{
 		Use:          "magnetSpider",
 		Short:        "magnetSpider - A sniffer that sniffs torrents from BitTorrent network.",
 		SilenceUsage: true,
 	}
 	root.RunE = func(cmd *cobra.Command, args []string) error {
-		if dir == userHome && err != nil {
-			return err
-		}
 
-		absDir, err := filepath.Abs(dir)
 		if err != nil {
 			return err
 		}
@@ -47,15 +54,26 @@ func main() {
 			log.SetOutput(os.Stdout)
 		}
 
-		p := & torsniff{
-			laddr:      net.JoinHostPort(addr, strconv.Itoa(int(port))),
-			timeout:    timeout,
-			maxFriends: friends,
-			maxPeers:   peers,
-			secret:     string(randBytes(20)),
-			dir:        absDir,
-			blacklist:  newBlackList(5*time.Minute, 50000),
+		p := &magnet.SpiderCore{
+			Laddr:      net.JoinHostPort(addr, strconv.Itoa(int(port))),
+			Timeout:    timeout,
+			MaxFriends: friends,
+			MaxPeers:   peers,
+			Secret:     string(magnet.RandBytes(20)),
+			Dir:        ".",
+			Blacklist:  magnet.NewBlackList(5*time.Minute, 50000),
+			Dao:        dao,
 		}
-		return p.run()
+		return p.Run()
+	}
+	root.Flags().StringVarP(&addr, "addr", "a", "", "listen on given address (default all, ipv4 and ipv6)")
+	root.Flags().Uint16VarP(&port, "port", "p", 6881, "listen on given port")
+	root.Flags().IntVarP(&friends, "friends", "f", 500, "max fiends to make with per second")
+	root.Flags().IntVarP(&peers, "peers", "e", 400, "max peers to connect to download torrents")
+	root.Flags().DurationVarP(&timeout, "Timeout", "t", 10*time.Second, "max time allowed for downloading torrents")
+	root.Flags().BoolVarP(&verbose, "verbose", "v", false, "Run in verbose mode")
+
+	if err := root.Execute(); err != nil {
+		fmt.Println(fmt.Errorf("could not start: %s", err))
 	}
 }

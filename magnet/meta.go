@@ -51,7 +51,7 @@ func newMetaWire(infohash string, from string, timeout time.Duration) *metaWire 
 	w := metaWirePool.Get().(*metaWire)
 	w.infohash = infohash
 	w.from = from
-	w.peerID = string(randBytes(20))
+	w.peerID = string(RandBytes(20))
 	w.timeout = timeout
 	w.conn = nil
 	w.err = nil

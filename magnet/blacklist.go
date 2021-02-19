@@ -19,7 +19,7 @@ type blackList struct {
 	limit        int
 }
 
-func newBlackList(expiredAfter time.Duration, limit int) *blackList {
+func NewBlackList(expiredAfter time.Duration, limit int) *blackList {
 	return &blackList{
 		ll:           list.New(),
 		cache:        make(map[string]*list.Element),
