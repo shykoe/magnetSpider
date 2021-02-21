@@ -60,26 +60,6 @@ func (t *Torrent) String() string {
 	)
 }
 func (t *Torrent) InsertDB() error {
-	//log.Print("Insert ", t.infohashHex, "name ", t.name)
-	//row, err := DB.Exec(
-	//	"insert INTO t_torrent_info(`hash`,`name`,`discover_time`, `discover_from`) values(?,?,?,?)",
-	//	t.infohashHex, t.name, time.Now(), LOCALHOST)
-	//if err != nil {
-	//	merr := err.(*mysql.MySQLError)
-	//	if merr.Number == 1062 {
-	//		return errors.New("Dup key!")
-	//	}
-	//	return err
-	//}
-	//hashID, _ := row.LastInsertId()
-	//for _, file := range t.files {
-	//	_, err = DB.Exec("INSERT INTO files_table(`info_id`,`hash`,`file_name`,`size`) values(?,?,?,?)",
-	//		hashID, t.infohashHex, file.name, file.length)
-	//	if err != nil {
-	//		continue
-	//	}
-	//}
-	//return nil
 	return nil
 }
 func parseTorrent(meta []byte, infohashHex string) (*model.Torrent, error) {
@@ -88,7 +68,10 @@ func parseTorrent(meta []byte, infohashHex string) (*model.Torrent, error) {
 		return nil, err
 	}
 
-	t := &model.Torrent{InfoHash: infohashHex}
+	t := &model.Torrent{
+		InfoHash: infohashHex,
+		DiscoverTime: time.Now(),
+	}
 	if name, ok := dict["name.utf-8"].(string); ok {
 		t.Name = name
 	} else if name, ok := dict["name"].(string); ok {
@@ -185,8 +168,10 @@ func (t *SpiderCore) work(ac *announcement, tokens chan struct{}) {
 	defer func() {
 		<-tokens
 	}()
-
-	if t.isTorrentExist(ac.infohashHex) {
+	log.Infof("income %s", ac.infohashHex)
+	exists := t.isTorrentExist(ac.infohashHex)
+	if exists {
+		log.Infof("infohash %s exists pass", ac.infohashHex)
 		return
 	}
 

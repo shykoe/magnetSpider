@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"time"
 )
+const LOG_FILE = "./torrent.log"
 
 func main() {
 	var err error
@@ -48,8 +49,11 @@ func main() {
 		if err != nil {
 			return err
 		}
-
-		log.SetOutput(ioutil.Discard)
+		file, err := os.OpenFile(LOG_FILE, os.O_WRONLY | os.O_CREATE | os.O_APPEND, 0755)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.SetOutput(file)
 		if verbose {
 			log.SetOutput(os.Stdout)
 		}

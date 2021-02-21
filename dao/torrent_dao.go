@@ -44,10 +44,10 @@ func (t TorrentDaoImpl) TorrentNotExists(infoHash string) bool {
 	err := collection.FindOne(ctx, filter).Decode(&result)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return true
+			return false
 		}
 		log.Errorf("IsTorrentExists err %s", err.Error())
 		return false
 	}
-	return false
+	return true
 }
