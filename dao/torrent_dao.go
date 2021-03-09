@@ -22,6 +22,7 @@ type TorrentDaoImpl struct {
 	DB       *mongo.Client
 	DataBase string
 	Es       *elasticsearch7.Client
+	Index    string
 }
 
 func (t TorrentDaoImpl) InsertTorrent(torrent *model.Torrent) error {
@@ -69,7 +70,7 @@ func (t TorrentDaoImpl) InsertTorrent2Es(torrent *model.Torrent) error {
 		return err
 	}
 	req := esapi.IndexRequest{
-		Index:      "torrent_1",
+		Index:      t.Index,
 		DocumentID: torrent.InfoHash,
 		Body:       strings.NewReader(string(bytes)),
 		Refresh:    "false",

@@ -49,6 +49,7 @@ func main() {
 	dao.DB = cli
 	dao.DataBase = "magnet"
 	dao.Es = es
+	dao.Index = config["index"]
 	root := &cobra.Command{
 		Use:          "magnetSpider",
 		Short:        "magnetSpider - A sniffer that sniffs torrents from BitTorrent network.",
