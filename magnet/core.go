@@ -132,6 +132,7 @@ type SpiderCore struct {
 	Blacklist  *blackList
 	Dir        string
 	Dao        dao.TorrentDao
+	Source     string
 }
 
 func (t *SpiderCore) Run() error {
@@ -169,11 +170,11 @@ func (t *SpiderCore) work(ac *announcement, tokens chan struct{}) {
 		<-tokens
 	}()
 	log.Infof("income %s", ac.infohashHex)
-	exists := t.isTorrentExist(ac.infohashHex)
-	if exists {
-		log.Infof("infohash %s exists pass", ac.infohashHex)
-		return
-	}
+	//exists := t.isTorrentExist(ac.infohashHex)
+	//if exists {
+	//	log.Infof("infohash %s exists pass", ac.infohashHex)
+	//	return
+	//}
 
 	peerAddr := ac.peer.String()
 	if t.Blacklist.has(peerAddr) {
@@ -198,7 +199,8 @@ func (t *SpiderCore) work(ac *announcement, tokens chan struct{}) {
 		return
 	}
 	if torrent != nil {
-		err := t.Dao.InsertTorrent(torrent)
+		torrent.DiscoverFrom = t.Source
+		err := t.Dao.InsertTorrent2Es(torrent)
 		if err != nil {
 			log.Errorf("InsertTorrent err: %s", err.Error())
 		}

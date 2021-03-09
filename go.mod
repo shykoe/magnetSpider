@@ -3,6 +3,7 @@ module github.com/shykoe/magnetSpider
 go 1.13
 
 require (
+	github.com/elastic/go-elasticsearch/v7 v7.11.0
 	github.com/marksamman/bencode v0.0.0-20150821143521-dc84f26e086e
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/sirupsen/logrus v1.7.0
