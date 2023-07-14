@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"time"
 )
+
 const LOG_FILE = "./torrent.log"
 
 func main() {
@@ -34,15 +35,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	dsn = fmt.Sprintf("mongodb://%s:%s@%s", config["user_name"], config["pass_word"], config["db_addr"])
-	fmt.Println(dsn)
-	cli, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(dsn))
 	esConf := &elasticsearch7.Config{
-		Addresses:             []string{
+		Addresses: []string{
 			config["es_addr"],
 		},
-		Username:              config["es_user"],
-		Password:              config["es_pswd"],
+		Username: config["es_user"],
+		Password: config["es_pswd"],
 	}
 	es, err := elasticsearch7.NewClient(*esConf)
 	var dao dao.TorrentDaoImpl
@@ -60,7 +58,7 @@ func main() {
 		if err != nil {
 			return err
 		}
-		file, err := os.OpenFile(LOG_FILE, os.O_WRONLY | os.O_CREATE | os.O_APPEND, 0755)
+		file, err := os.OpenFile(LOG_FILE, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0755)
 		if err != nil {
 			log.Fatal(err)
 		}
