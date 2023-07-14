@@ -1,15 +1,12 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	elasticsearch7 "github.com/elastic/go-elasticsearch/v7"
 	"github.com/shykoe/magnetSpider/dao"
 	"github.com/shykoe/magnetSpider/magnet"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"net"
@@ -28,7 +25,6 @@ func main() {
 	var timeout time.Duration
 	var verbose bool
 	var friends int
-	var dsn string
 	config := make(map[string]string)
 	data, err := ioutil.ReadFile("./config.yml")
 	err = yaml.Unmarshal(data, &config)
@@ -44,7 +40,7 @@ func main() {
 	}
 	es, err := elasticsearch7.NewClient(*esConf)
 	var dao dao.TorrentDaoImpl
-	dao.DB = cli
+	dao.DB = nil
 	dao.DataBase = "magnet"
 	dao.Es = es
 	dao.Index = config["index"]
