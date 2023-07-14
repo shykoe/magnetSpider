@@ -1,0 +1,3 @@
+es_addr: 127.0.0.1:9200
+es_user: elastic
+es_pswd: password
