@@ -60,12 +60,12 @@ func (t TorrentDaoImpl) TorrentNotExists(infoHash string) bool {
 }
 
 func (t TorrentDaoImpl) InsertTorrent2Es(torrent *model.Torrent) error {
-	if t.Es == nil{
+	if t.Es == nil {
 		log.Error("es nil ")
 		return nil
 	}
 	bytes, err := json.Marshal(torrent)
-	if err != nil{
+	if err != nil {
 		log.Error(err.Error())
 		return err
 	}
@@ -80,8 +80,8 @@ func (t TorrentDaoImpl) InsertTorrent2Es(torrent *model.Torrent) error {
 		log.Errorf("Error getting response: %s", err)
 	}
 	defer res.Body.Close()
-	if res.IsError(){
-		log.Errorf("[%s] Error indexing document ID=%d msg=%s", res.Status(), torrent.InfoHash, res.String())
+	if res.IsError() {
+		log.Errorf("[%s] Error indexing document ", res.Status())
 	}
 	return nil
 }
